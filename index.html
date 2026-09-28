@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <!-- スマホの画面比率に完全追従させるViewport設定 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>MindAR WebAR Demo</title>
+
+  <!-- A-Frame 1.4.2 & MindAR 1.2.5 -->
+  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
+  <style>
+    /* 画面全体にフィットさせるための絶対指定 */
+    html, body {
+      position: relative;
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    /* A-Frameシーンをスマホ全画面に強制 */
+    a-scene {
+      width: 100vw !important;
+      height: 100vh !important;
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+    }
+
+    /* ビデオ映像を全画面カバー */
+    video {
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      object-fit: cover !important;
+    }
+
+    /* AR起動前のオーバーレイカード */
+    #overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(15, 23, 42, 0.9);
+      z-index: 99999;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .start-card {
+      background: #ffffff;
+      padding: 32px 24px;
+      border-radius: 18px;
+      text-align: center;
+      max-width: 290px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+    }
+
+    .start-card h2 {
+      margin: 0 0 10px;
+      font-size: 18px;
+      color: #1e293b;
+    }
+
+    .start-card p {
+      font-size: 13px;
+      color: #64748b;
+      margin: 0 0 20px;
+      line-height: 1.5;
+    }
+
+    #start-btn {
+      appearance: none;
+      border: none;
+      background: #2563eb;
+      color: #ffffff;
+      font-size: 15px;
+      font-weight: 600;
+      padding: 12px 30px;
+      border-radius: 9999px;
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);
+    }
+
+    /* 状態確認用ステータスバー */
+    #status-bar {
+      position: fixed;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.75);
+      color: #ffffff;
+      padding: 8px 18px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: bold;
+      z-index: 10000;
+      pointer-events: none;
+      white-space: nowrap;
+      transition: background 0.3s ease;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="status-bar">カメラ起動準備完了</div>
+
+  <!-- AR起動オーバーレイ -->
+  <div id="overlay">
+    <div class="start-card">
+      <h2>WebAR デモ</h2>
+      <p>ボタンを押してカメラを許可し、マーカーにかざしてください。</p>
+      <button id="start-btn">ARを開始する</button>
+    </div>
+  </div>
+
+  <!-- 
+    修正点1: embedded 属性を削除（スマホ全画面にするため）
+  -->
+  <a-scene
+    id="ar-scene"
+    mindar-image="imageTargetSrc: ./mark.mind; autoStart: false; uiLoading: no; uiError: yes;"
+    color-space="sRGB"
+    renderer="colorManagement: true, physicallyCorrectLights: true"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false">
+
+    <a-assets>
+      <img id="test-texture" src="./test.png" crossorigin="anonymous">
+    </a-assets>
+
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+    <!-- マーカーターゲット -->
+    <a-entity id="target" mindar-image-target="targetIndex: 0">
+      
+      <!-- 
+        修正点2:
+        - マーカー平面(XY)から手前に浮かせるため Z軸 (from: 0 0 0.5 to: 0 0 1.5) で上下（浮遊）アニメーション
+        - rotation="0 0 0" でマーカーと正面を合わせ、裏返っても見えるよう side: double
+        - 画像比率に合わせ 1x1 の平面
+      -->
+      <a-plane
+        id="ar-plane"
+        src="#test-texture"
+        position="0 0 0.5"
+        width="1"
+        height="1"
+        material="transparent: true; alphaTest: 0.1; side: double;"
+        animation="property: position; from: 0 0 0.5; to: 0 0 2; dir: alternate; dur: 3000; easing: easeInOutQuad; loop: true">
+      </a-plane>
+
+    </a-entity>
+  </a-scene>
+
+  <script>
+    const sceneEl = document.querySelector('#ar-scene');
+    const startBtn = document.querySelector('#start-btn');
+    const overlay = document.querySelector('#overlay');
+    const statusBar = document.querySelector('#status-bar');
+    const targetEl = document.querySelector('#target');
+
+    startBtn.addEventListener('click', async () => {
+      statusBar.textContent = 'カメラ初期化中...';
+      const arSystem = sceneEl.systems['mindar-image-system'];
+      
+      try {
+        await arSystem.start();
+        overlay.style.display = 'none';
+        statusBar.textContent = 'マーカーを探索中...';
+      } catch (err) {
+        console.error(err);
+        statusBar.textContent = '起動エラー: ' + err.message;
+      }
+    });
+
+    targetEl.addEventListener('targetFound', () => {
+      statusBar.textContent = '★ マーカー認識中！';
+      statusBar.style.background = 'rgba(22, 163, 74, 0.85)'; // グリーン
+    });
+
+    targetEl.addEventListener('targetLost', () => {
+      statusBar.textContent = 'マーカーを見失いました';
+      statusBar.style.background = 'rgba(0, 0, 0, 0.75)';
+    });
+  </script>
+</body>
+</html>
